@@ -4,6 +4,7 @@ import (
 	"encoding/csv"
 	"errors"
 	"fmt"
+	"github.com/wittano/focus/seq"
 	"io"
 	"log"
 	"os"
@@ -50,26 +51,29 @@ const (
 )
 
 type Database struct {
-	f   *os.File
-	csv *csv.Reader
+	f *os.File
+	r *csv.Reader
 }
 
 func (f *Database) Close() error {
 	return f.f.Close()
 }
 
-var ErrNotFound = errors.New("no entry found")
+var (
+	ErrNotFound   = errors.New("no entry found")
+	ErrDateFuture = errors.New("date entry cannot be in the future")
+)
 
 func (f *Database) Level(t time.Time) (LevelValue, error) {
 	if t.Compare(time.Now()) > 0 {
-		return None, errors.New("date entry cannot be in the future")
+		return None, ErrDateFuture
 	}
 
 	date := t.Format(dateFormat)
 	defer f.f.Seek(0, io.SeekStart)
 
 	for {
-		lines, err := f.csv.Read()
+		lines, err := f.r.Read()
 		if err != nil {
 			return None, err
 		}
@@ -88,6 +92,62 @@ func (f *Database) Level(t time.Time) (LevelValue, error) {
 	}
 
 	return None, ErrNotFound
+}
+
+func (f *Database) Put(t time.Time, l LevelValue) error {
+	if t.Compare(time.Now()) > 0 {
+		return ErrDateFuture
+	}
+	defer f.f.Seek(0, io.SeekStart)
+
+	rawVal := strconv.Itoa(int(l))
+
+	for {
+		prevOffset := f.r.InputOffset()
+		lines, err := f.r.Read()
+		if errors.Is(err, io.EOF) {
+			break
+		} else if err != nil {
+			return err
+		}
+
+		if lines[0] == t.Format(dateFormat) && t.Hour()+1 < len(lines) {
+			var (
+				n      int
+				offset = int64(seq.SumStringLength(lines[:t.Hour()+1])+t.Hour()+1) + prevOffset
+				buf    = make([]byte, 1)
+			)
+
+			if n, err = f.f.ReadAt(buf, offset+1); err != nil && n == 1 && buf[0] != ',' {
+				_, err = f.f.WriteAt([]byte(","), offset+1)
+				if err != nil {
+					return err
+				}
+			}
+
+			_, err = f.f.WriteAt([]byte(rawVal), offset)
+			return err
+		} else if lines[0] == t.Format(dateFormat) && t.Hour()+1 >= len(lines) {
+			missingCommas := t.Hour() + 2 - len(lines)
+			offset := int64(seq.SumStringLength(lines)) + prevOffset
+			for i := 1; i <= missingCommas; i++ {
+				var val []byte
+				if i == missingCommas {
+					val = []byte("," + rawVal)
+				} else {
+					val = []byte(",")
+				}
+
+				_, err = f.f.WriteAt(val, offset+int64(i))
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}
+
+	return fmt.Errorf("no entry for %s date found", t.Format(dateFormat))
 }
 
 func New(csvPath string) (db *Database, err error) {
@@ -122,8 +182,8 @@ func New(csvPath string) (db *Database, err error) {
 		}
 	}
 
-	db.csv = csv.NewReader(f)
-	db.csv.FieldsPerRecord = -1
+	db.r = csv.NewReader(f)
+	db.r.FieldsPerRecord = -1
 	return
 }
 

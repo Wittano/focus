@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"github.com/wittano/focus/focus"
 	"log"
 	"time"
@@ -25,5 +24,5 @@ func main() {
 	}
 	defer db.Close()
 
-	fmt.Println(db.Level(time.Now()))
+	log.Fatal(db.Put(time.Now(), 1))
 }
