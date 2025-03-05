@@ -1,5 +1,5 @@
 { mkShell
-, go
+, go_1_24
 , gotools
 , act
 , nixd
@@ -7,12 +7,12 @@
 }: mkShell {
   hardeningDisable = [ "all" ];
 
-  GOROOT = "${go}/share/go";
+  GOROOT = "${go_1_24}/share/go";
   DEBUG_ARGS = "";
 
   nativeBuildInputs = [
     # GO
-    go
+    go_1_24
     gotools
 
     # Nix
