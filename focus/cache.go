@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"github.com/wittano/focus/seq"
 	"io"
 	"os"
 	"strings"
@@ -13,13 +14,12 @@ import (
 
 type posCache struct {
 	mutex     sync.Mutex
-	positions map[time.Time]int64
+	positions map[string]int64
 }
 
 func (p *posCache) Position(t time.Time) (int64, bool) {
-	t = time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
 	p.mutex.Lock()
-	pos, ok := p.positions[t]
+	pos, ok := p.positions[t.Format(dateFormat)]
 	p.mutex.Unlock()
 	return pos, ok
 }
@@ -53,10 +53,8 @@ func (p *posCache) Put(t time.Time, pos int64, dataLen int) (err error) {
 		return p.Update(t, dataLen)
 	}
 
-	t = time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
-
 	p.mutex.Lock()
-	p.positions[t] = pos
+	p.positions[t.Format(dateFormat)] = pos
 	p.mutex.Unlock()
 
 	return nil
@@ -66,18 +64,18 @@ func newCache(f *os.File) (cache posCache, err error) {
 	if f == nil {
 		panic("focus: file pointer is nil")
 	}
+	f.Seek(0, io.SeekStart)
 	defer f.Seek(0, io.SeekStart)
-
-	buf := make([]byte, 64)
-	s := bufio.NewScanner(f)
-	s.Buffer(buf, 64)
 
 	offset, err := f.Seek(0, io.SeekCurrent)
 	if err != nil {
 		return
 	}
 
-	cache = posCache{positions: make(map[time.Time]int64)}
+	cache = posCache{positions: make(map[string]int64)}
+
+	s := bufio.NewScanner(f)
+	s.Split(bufio.ScanLines)
 	for s.Scan() {
 		txt := s.Text()
 		split := strings.Split(txt, ",")
@@ -85,7 +83,7 @@ func newCache(f *os.File) (cache posCache, err error) {
 			continue
 		}
 
-		rawTime := split[0]
+		rawTime := seq.CleanStringFromUnprintedChars(split[0])
 		if rawTime == "" {
 			continue
 		}
@@ -95,11 +93,15 @@ func newCache(f *os.File) (cache posCache, err error) {
 		if err != nil {
 			return
 		}
-		cache.Put(t, offset, 0)
-
-		offset, err = f.Seek(0, io.SeekCurrent)
-		if err != nil {
+		if err = cache.Put(t, offset, 0); err != nil && !errors.Is(err, ErrInvalidTime) {
 			return
+		} else if errors.Is(err, ErrInvalidTime) {
+			err = nil
+			break
+		}
+
+		for _, s := range split {
+			offset += int64(len(s)) + 1
 		}
 	}
 

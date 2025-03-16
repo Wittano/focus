@@ -1,19 +1,20 @@
 package focus
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/csv"
 	"errors"
 	"fmt"
-	"github.com/wittano/focus/seq"
 	"io"
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
-type LevelValue int
+type LevelValue byte
 
 const (
 	None LevelValue = iota
@@ -115,76 +116,53 @@ func (d *Database) Put(t time.Time, l LevelValue) error {
 		prevOffset int64
 		err        error
 	)
-	if prevOffset, ok = d.cache.Position(t); !ok {
-		prevOffset, err = d.createEntry(t)
+	if prevOffset, ok = d.cache.Position(t); ok {
+		_, err = d.f.Seek(prevOffset, io.SeekStart)
 		if err != nil {
 			return err
 		}
+
+		buf := bufio.NewReader(d.f)
+		line, err := buf.ReadBytes(byte('\n'))
+		if err != nil {
+			return err
+		}
+
+		var (
+			commaCount       = 0
+			addOffset  int64 = 0
+		)
+		for _, b := range line {
+			if commaCount > t.Hour() {
+				break
+			}
+
+			if b == byte(',') {
+				commaCount++
+			}
+
+			addOffset++
+		}
+
+		str := []byte(strconv.Itoa(int(l)))
+		_, err = d.f.WriteAt(str, prevOffset+addOffset)
+		return err
 	}
 
-	_, err = d.f.Seek(prevOffset, io.SeekStart)
+	_, err = d.createEntry(t)
+	if err != nil {
+		return err
+	}
+
+	_, err = d.f.Seek(0, io.SeekEnd)
 	if err != nil {
 		return err
 	}
 	rawVal := strconv.Itoa(int(l))
 
-	for {
-		prevOffset = d.r.InputOffset()
-		lines, err := d.r.Read()
-		if errors.Is(err, io.EOF) {
-			break
-		} else if err != nil {
-			return err
-		}
-
-		if lines[0] == t.Format(dateFormat) && t.Hour()+1 < len(lines) {
-			var (
-				n      int
-				offset = int64(seq.SumStringLength(lines[:t.Hour()+1])+t.Hour()+1) + prevOffset
-				buf    = make([]byte, 1)
-			)
-
-			if n, err = d.f.ReadAt(buf, offset+1); err != nil && n == 1 && buf[0] != ',' {
-				_, err = d.f.WriteAt([]byte(","), offset+1)
-				if err != nil {
-					return err
-				}
-			}
-
-			_, err = d.f.WriteAt([]byte(rawVal), offset)
-			if err == nil {
-				go func() {
-					if err = d.cache.Update(t, 1); err != nil {
-						log.Println(err)
-					}
-				}()
-			}
-			return err
-		} else if lines[0] == t.Format(dateFormat) && t.Hour()+1 >= len(lines) {
-			missingCommas := t.Hour() + 2 - len(lines)
-			offset := int64(seq.SumStringLength(lines)) + prevOffset
-			putDataCount := 0
-			for i := 0; i < missingCommas; i++ {
-				var val []byte
-				if i == missingCommas-1 {
-					val = []byte("," + rawVal)
-				} else {
-					val = []byte(",")
-				}
-
-				putDataCount += len(val)
-
-				_, err = d.f.WriteAt(val, offset+int64(i))
-				if err != nil {
-					return err
-				}
-			}
-
-			return d.cache.Update(t, putDataCount)
-		}
-	}
-
-	return fmt.Errorf("no entry for %s date found", t.Format(dateFormat))
+	data := strings.Repeat(",", t.Hour()) + rawVal
+	_, err = d.f.WriteString(data)
+	return err
 }
 
 func (d *Database) createEntry(t time.Time) (pos int64, err error) {
@@ -233,5 +211,10 @@ func New(csvPath string) (db *Database, err error) {
 	db.r = csv.NewReader(f)
 	db.r.FieldsPerRecord = -1
 	db.cache, err = newCache(f)
+	if err != nil {
+		db.f.Close()
+
+		return nil, err
+	}
 	return
 }
