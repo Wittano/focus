@@ -2,12 +2,9 @@ package focus
 
 import (
 	"bufio"
-	"bytes"
-	"encoding/csv"
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -59,12 +56,44 @@ var (
 
 type Database struct {
 	f     *os.File
-	r     *csv.Reader
+	buf   []byte
 	cache posCache
 }
 
 func (d *Database) Close() error {
 	return d.f.Close()
+}
+
+func (d *Database) Levels(t time.Time) ([]LevelValue, error) {
+	if pos, ok := d.cache.Position(t); ok {
+		_, err := d.f.Seek(pos, io.SeekStart)
+		if err != nil {
+			return nil, err
+		}
+
+		defer d.f.Seek(0, io.SeekStart)
+	}
+
+	return d.readLine()
+}
+
+func (d *Database) readLine() ([]LevelValue, error) {
+	if _, err := d.f.Read(d.buf); err != nil {
+		return nil, err
+	}
+
+	levels := make([]LevelValue, 24)
+	s := strings.Split(string(d.buf), ",")
+	for i := 1; i < len(s); i++ {
+		l, err := strconv.Atoi(s[i])
+		if err != nil {
+			return nil, err
+		}
+
+		levels[i-1] = LevelValue(l)
+	}
+
+	return levels, nil
 }
 
 func (d *Database) Level(t time.Time) (LevelValue, error) {
@@ -79,28 +108,13 @@ func (d *Database) Level(t time.Time) (LevelValue, error) {
 		if err != nil {
 			return None, err
 		}
-	}
 
-	for {
-		lines, err := d.r.Read()
+		lines, err := d.readLine()
 		if err != nil {
 			return None, err
 		}
-		hour := t.Hour()
-		isSameDate := bytes.Equal(bytes.Trim([]byte(lines[0]), string([]byte{0x0})), []byte(t.Format(dateFormat)))
-		if isSameDate && hour+1 < len(lines) {
-			val := lines[hour+1]
-			l, err := strconv.Atoi(string(bytes.Trim([]byte(val), string([]byte{0x0}))))
-			if err != nil && val != "" {
-				log.Println(err)
-				break
-			} else if val == "" {
-				l = 0
-			}
-			return LevelValue(l), nil
-		} else if isSameDate && hour+1 >= len(lines) {
-			return None, nil
-		}
+
+		return lines[t.Hour()+1], nil
 	}
 
 	return None, ErrNotFound
@@ -207,14 +221,11 @@ func New(csvPath string) (db *Database, err error) {
 	}()
 	db = new(Database)
 	db.f = f
+	db.buf = make([]byte, len(dateFormat)+24+24)
 
-	db.r = csv.NewReader(f)
-	db.r.FieldsPerRecord = -1
 	db.cache, err = newCache(f)
 	if err != nil {
-		db.f.Close()
-
-		return nil, err
+		err = errors.Join(err, db.f.Close())
 	}
-	return
+	return db, err
 }

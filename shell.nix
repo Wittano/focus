@@ -1,9 +1,11 @@
 { mkShell
 , go_1_24
 , gotools
+, gopls
 , act
 , nixd
 , nixpkgs-fmt
+, templ
 }: mkShell {
   hardeningDisable = [ "all" ];
 
@@ -14,6 +16,8 @@
     # GO
     go_1_24
     gotools
+    gopls
+    templ
 
     # Nix
     nixpkgs-fmt

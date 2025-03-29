@@ -1,0 +1,49 @@
+package components
+
+import "github.com/wittano/focus/focus"
+import "fmt"
+
+func color(l focus.LevelValue) string {
+    var s string
+    switch (l) {
+        case focus.Flow:
+            s = "lime"
+        case focus.High:
+            s = "green"
+        case focus.Medium:
+            s = "yellow"
+        case focus.Low:
+            s = "orange"
+        case focus.VeryLow:
+            s = "red"
+        default:
+            s = "gray"
+    }
+
+    return s
+}
+
+templ Home(t string, data []focus.LevelValue) {
+	<html lang="en">
+		<head>
+			<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+			<title>Focus plot</title>
+		</head>
+		<body>
+			<div>
+				<p>Date: { t }</p>
+                <div class="flex space-x-3">
+                    for i, v := range data {
+                        <div class="bg-gray-100">
+                            <div class={fmt.Sprintf("m-2 bg-%s-200", color(v))}>
+                                <p>{fmt.Sprintf("%d", i)}</p>
+                                <p>{v.String()}</p>
+                            </div>
+                        </div>
+                    }
+                </div>
+				<p>Hello World</p>
+			</div>
+		</body>
+	</html>
+}

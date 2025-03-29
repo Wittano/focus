@@ -351,3 +351,8 @@ tags
 # Nix
 result/
 *.csv
+
+components/*.go
+components/*.txt
+
+tmp
