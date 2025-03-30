@@ -85,8 +85,12 @@ func (d *Database) readLine() ([]LevelValue, error) {
 	levels := make([]LevelValue, 24)
 	s := strings.Split(string(d.buf), ",")
 	for i := 1; i < len(s); i++ {
+		if s[i] == "" {
+			continue
+		}
+
 		l, err := strconv.Atoi(s[i])
-		if err != nil {
+		if err != nil && s[i] != "" {
 			return nil, err
 		}
 

@@ -1,0 +1,39 @@
+package components
+
+import "time"
+import "github.com/wittano/focus/focus"
+import "fmt"
+
+func color(l focus.LevelValue) string {
+	var s string
+	switch l {
+	case focus.Flow:
+		s = "lime"
+	case focus.High:
+		s = "green"
+	case focus.Medium:
+		s = "yellow"
+	case focus.Low:
+		s = "orange"
+	case focus.VeryLow:
+		s = "red"
+	default:
+		s = "gray"
+	}
+
+	return s
+}
+
+templ FocusData(t time.Time, data []focus.LevelValue) {
+	<p class="text-xl text-center mt-5 mb-2">Selected date: { t.Format(time.DateOnly) }</p>
+	<div class="flex flex-wrap space-x-3 justify-center">
+		for i, v := range data {
+			<div class="bg-gray-100 rounded-full min-w-50 p-2 m-2">
+				<div class={ fmt.Sprintf("m-2 bg-%s-200 text-center p-1 rounded-full", color(v)) }>
+					<p class="mt-1">{ v.String() }</p>
+					<p class="mt-2">{ fmt.Sprintf("%02d:00", i) }</p>
+				</div>
+			</div>
+		}
+	</div>
+}

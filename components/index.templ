@@ -1,48 +1,29 @@
 package components
 
 import "github.com/wittano/focus/focus"
-import "fmt"
+import "time"
 
-func color(l focus.LevelValue) string {
-    var s string
-    switch (l) {
-        case focus.Flow:
-            s = "lime"
-        case focus.High:
-            s = "green"
-        case focus.Medium:
-            s = "yellow"
-        case focus.Low:
-            s = "orange"
-        case focus.VeryLow:
-            s = "red"
-        default:
-            s = "gray"
-    }
-
-    return s
-}
-
-templ Home(t string, data []focus.LevelValue) {
+templ Home(t time.Time, data []focus.LevelValue) {
 	<html lang="en">
 		<head>
 			<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+			<script src="https://unpkg.com/htmx.org@2.0.4"></script>
 			<title>Focus plot</title>
 		</head>
 		<body>
-			<div>
-				<p>Date: { t }</p>
-                <div class="flex space-x-3">
-                    for i, v := range data {
-                        <div class="bg-gray-100">
-                            <div class={fmt.Sprintf("m-2 bg-%s-200", color(v))}>
-                                <p>{fmt.Sprintf("%d", i)}</p>
-                                <p>{v.String()}</p>
-                            </div>
-                        </div>
-                    }
-                </div>
-				<p>Hello World</p>
+			<div class="flex justify-center flex-col">
+				<div class="max-w-50">
+					<div class="flex flex-col justify-center mt-1 ml-1">
+						<div class="flex">
+							<label for="date">Date: </label>
+							<input name="date" type="date" max={ time.Now().Format(time.DateOnly) }/>
+						</div>
+						<button class="cursor-pointer" hx-get="/data" hx-target="#focus-data" hx-include="[name='date']">Search</button>
+					</div>
+				</div>
+				<div id="focus-data">
+					@FocusData(t, data)
+				</div>
 			</div>
 		</body>
 	</html>

@@ -32,7 +32,37 @@ func main() {
 	}
 
 	r := chi.NewRouter()
-	r.Get("/", handleTemplate(templ.Handler(components.Home(t.Format(time.DateOnly), data))))
+	r.Get("/", handleTemplate(templ.Handler(components.Home(t, data))))
+	r.Get("/data", func(w http.ResponseWriter, r *http.Request) {
+		rawData := r.FormValue("date")
+		if rawData == "" {
+			log.Println("Missing required parameter 'data'")
+		}
+
+		t, err := time.Parse(time.DateOnly, rawData)
+		if err != nil && rawData != "" {
+			log.Println(err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		} else if rawData == "" {
+			t = time.Now()
+		}
+
+		if t.Compare(time.Now()) > 0 {
+			log.Println("/data: time 'data' cannot be from future")
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		data, err := db.Levels(t)
+		if err != nil {
+			log.Println(err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		templ.Handler(components.FocusData(t, data)).ServeHTTP(w, r)
+	})
 
 	log.Println("Listening on " + strconv.Itoa(port))
 	if err = http.ListenAndServe(":"+strconv.Itoa(port), r); err != nil {
