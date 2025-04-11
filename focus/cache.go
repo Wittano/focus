@@ -4,12 +4,12 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"github.com/wittano/focus/seq"
 	"io"
 	"os"
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 )
 
 type posCache struct {
@@ -83,13 +83,15 @@ func newCache(f *os.File) (cache posCache, err error) {
 			continue
 		}
 
-		rawTime := seq.CleanStringFromUnprintedChars(split[0])
-		if rawTime == "" {
-			continue
+		var rawTime strings.Builder
+		for _, r := range split[0] {
+			if unicode.IsGraphic(r) {
+				rawTime.WriteRune(r)
+			}
 		}
 
 		var t time.Time
-		t, err = time.Parse(dateFormat, rawTime)
+		t, err = time.Parse(dateFormat, rawTime.String())
 		if err != nil {
 			return
 		}

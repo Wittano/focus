@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"github.com/a-h/templ"
 	"github.com/go-chi/chi/v5"
 	"github.com/wittano/focus/components"
@@ -19,6 +20,8 @@ func handleTemplate(c *templ.ComponentHandler) func(http.ResponseWriter, *http.R
 	}
 }
 
+var emptyData = make([]focus.LevelValue, 24)
+
 func main() {
 	db, err := focus.New("./focus-plot.csv")
 	if err != nil {
@@ -27,8 +30,11 @@ func main() {
 
 	t := time.Now()
 	data, err := db.Levels(t)
-	if err != nil {
+	if err != nil && !errors.Is(err, focus.ErrNotFound) {
 		log.Fatal(err)
+	}
+	if data == nil {
+		data = emptyData
 	}
 
 	r := chi.NewRouter()
@@ -55,10 +61,12 @@ func main() {
 		}
 
 		data, err := db.Levels(t)
-		if err != nil {
+		if err != nil && !errors.Is(err, focus.ErrNotFound) {
 			log.Println(err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
+		} else if errors.Is(err, focus.ErrNotFound) {
+			data = emptyData
 		}
 
 		templ.Handler(components.FocusData(t, data)).ServeHTTP(w, r)

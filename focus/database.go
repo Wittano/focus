@@ -72,6 +72,8 @@ func (d *Database) Levels(t time.Time) ([]LevelValue, error) {
 		}
 
 		defer d.f.Seek(0, io.SeekStart)
+	} else {
+		return nil, ErrNotFound
 	}
 
 	return d.readLine()
@@ -85,6 +87,10 @@ func (d *Database) readLine() ([]LevelValue, error) {
 	levels := make([]LevelValue, 24)
 	s := strings.Split(string(d.buf), ",")
 	for i := 1; i < len(s); i++ {
+		if i > len(levels) {
+			break
+		}
+
 		if s[i] == "" {
 			continue
 		}
